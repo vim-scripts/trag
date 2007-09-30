@@ -1,0 +1,226 @@
+*trag.txt*          A slightly language-aware alternative to grep
+                    Author: Thomas Link, micathom at gmail com
+
+You can think of this plugin either as some kind of ad-hoc tags or as a 
+project-oriented and slightly programming-language-aware alternative to 
+grep.
+
+First, define which files belong to your project. Most likely your 
+project's source files are already registered in your tags files, which 
+will be used by default. Alternatively you can set the variable 
+[wbg]:trag_files to a list of files that will be used instead. (Setting 
+this variable will prevent the use of tags.)
+
+Secondly, perform certain operations on these files, like:
+
+    - Select a file to edit
+    - Scan files for an expression (somewhat like grep)
+    - Provide for "modes", i.e. format the regular expression so that 
+      you can easily search for, e.g., only variable definitions or only 
+      function calls.
+
+
+-----------------------------------------------------------------------
+Install~
+
+Edit the vba file and type: >
+
+    :so %
+
+See :help vimball for details. If you have difficulties or use vim 7.0, 
+please make sure, you have the current version of vimball (vimscript 
+#1502) installed.
+
+This script requires tlib (vimscript #1863) to be installed.
+
+Suggested maps (best set in ~/vimfiles/after/plugin/trag.vim): >
+
+    noremap <Leader>r. :TRag * 
+    noremap <Leader>r# :TRag #w <c-r><c-w><cr>
+    for c in keys(g:trag_modes)
+        exec "nnoremap <Leader>r". c .' :TRag #'. c .' <c-r><c-w><cr>'
+        exec "vnoremap <Leader>r". c .' y<esc>:TRag #'. c .' <c-r>"<cr>'
+    endfor
+
+
+-----------------------------------------------------------------------
+                                                    *trag-modes*
+Modes~
+
+Certain commands take a "mode" as argument. A "mode" in the context of 
+trag means a way how the expression is interpreted and (in the future) 
+how the lines are scanned.
+
+These modes are:
+  v ... variable definition
+  V ... variable definition (contains string)
+  f ... function call/definition
+  F ... function call/definition (contains string)
+  w ... find as word
+  d ... function/method definitions
+  D ... function/method definitions (contains string)
+  c ... class definitions
+  m ... module definitions
+
+Additional pseude modes:
+  # ... escape a literal expression as regexp
+
+Not every mode is defined for every filetype. Currenty, support for 
+the following filetype(s) is somewhat above average:
+  - ruby
+
+Note: I'd appreciate if you sent me sophisticated mode definitions for 
+more filetypes so that I can include them in future releases.
+
+A mode is best defined using the |:TRagDefMode| command.
+Take a look at ../plugin/trag.vim to find out more.
+
+If you want to run a command without modes, use "*" or "." as 
+argument, whatever if more convenient to type on your keyboard.
+
+See |trag#Grep()| for details of how to use this.
+
+
+------------------------------------------------------------------------
+Contents~
+
+    plugin/trag.vim
+        :TRagDefMode ........ |:TRagDefMode|
+        :TRag ............... |:TRag|
+        :TRagfile ........... |:TRagfile|
+        :TRagcw ............. |:TRagcw|
+        :TRagsearch ......... |:TRagsearch|
+        :TRaggrep ........... |:TRaggrep|
+        :TRagsetfiles ....... |:TRagsetfiles|
+    autoload/trag.vim
+        trag#SetFiles ....... |trag#SetFiles()|
+        trag#Edit ........... |trag#Edit()|
+        trag#Grep ........... |trag#Grep()|
+        trag#QuickList ...... |trag#QuickList()|
+        trag#EditQFE ........ |trag#EditQFE()|
+        trag#PreviewQFE ..... |trag#PreviewQFE()|
+        trag#GotoQFE ........ |trag#GotoQFE()|
+
+
+------------------------------------------------------------------------
+plugin/trag.vim~
+
+                                                    *:TRagDefMode*
+:TRagDefMode MODE FILETYPE /REGEXP/
+    Examples: >
+      TRagDefMode v * /\C\<%s\>\s*=[^=~<>]/
+      TRagDefMode v ruby /\C\<%s\>\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
+<
+
+                                                    *:TRag*
+:TRag[!] MODE REGEXP
+    Run |:TRagsearch| and instantly display the result with |:TRagcw|.
+    See |trag#Grep()| for help on the arguments.
+    Examples: >
+      " Find any matches
+      TRag . foo
+    
+      " Find as word
+      TRag w foo
+    
+      " Find variable definitions like: foo = 1
+      TRag v foo
+    
+      " Find function calls like: foo(a, b)
+      TRag f foo
+<
+
+                                                    *:TRagfile*
+:TRagfile
+    Edit a file registered in your tag files.
+
+                                                    *:TRagcw*
+:TRagcw
+    Display a quick fix list using |tlib#input#ListD()|.
+
+                                                    *:TRagsearch*
+:TRagsearch[!] MODE REGEXP
+    Scan the files registered in your tag files for REGEXP. Generate a 
+    quickfix list. With [!], append to the given list. The quickfix list 
+    can be fewed with commands like |:cw| or |:TRagcw|.
+    
+    The REGEXP has to match a single line. This uses |readfile()| and the 
+    scans the lines. This is an alternative to |:vimgrep|.
+    If you choose your identifiers wisely, this should guide you well 
+    through your sources.
+    See |trag#Grep()| for help on the arguments.
+
+                                                    *:TRaggrep*
+:TRaggrep MODE REGEXP GLOBPATTERN
+    A 80%-replacement for grep.
+    
+    Example: >
+      :TRaggrep . foo *.vim
+<    
+    Note: In comparison with |:vimgrep| or |:grep|, this comand still 
+    takes an extra |trag-modes| argument.
+
+                                                    *:TRagsetfiles*
+:TRagsetfiles [FILELIST]
+    The file list is set only once per buffer. If the list of the project 
+    files has changed, you have to run this command on order to reset the 
+    per-buffer list.
+    
+    If no filelist is given, collect the files in your tags files.
+    
+    Examples: >
+      :TRagsetfiles
+      :TRagsetfiles split(glob('foo*.txt'), '\n')
+<
+
+
+------------------------------------------------------------------------
+autoload/trag.vim~
+
+                                                    *trag#SetFiles()*
+trag#SetFiles(?files=[])
+
+                                                    *trag#Edit()*
+trag#Edit()
+
+                                                    *trag#Grep()*
+trag#Grep(args, ?replace=1, ?files=[])
+    args: A string with the format: MODE REGEXP
+    
+    If the variables [bg]:trag_rxf_{mode}_{&filetype} or 
+    [bg]:trag_rxf_{mode} exist, these will be taken as format string (see 
+    |printf()|) to format REGEXP.
+    
+    If the use of regular expressions alone doesn't meet your demands, you 
+    can define the functions trag#Process_{mode}_{filesuffix} or 
+    trag#Process_{mode}, which will be run on every line with the 
+    arguments: match, line, quicklist, filename, lineno. This function 
+    returns [match, line]. If match != -1, the line will be added to the 
+    quickfix list.
+    If such a function is defined, it will be called for every line.
+    
+    EXAMPLE:
+    trag#Grep('v foo') will find by default take g:trag_rxf_v and find 
+    lines that looks like "\<foo\>\s*=[^=~]", which most likely is a 
+    variable definition in many programming languages. I.e. it will find 
+    lines like: >
+      foo = 1
+<    but not: >
+      def foo(bar)
+      call foo(bar)
+      if foo == 1
+<
+
+                                                    *trag#QuickList()*
+trag#QuickList()
+
+                                                    *trag#EditQFE()*
+trag#EditQFE(world, selected)
+
+                                                    *trag#PreviewQFE()*
+trag#PreviewQFE(world, selected)
+
+                                                    *trag#GotoQFE()*
+trag#GotoQFE(world, selected)
+
+

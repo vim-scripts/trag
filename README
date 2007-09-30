@@ -1,0 +1,31 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2033
+
+Trag builds regular expressions for vimgrep or its own grep-like function (depending on the task at hand) that allow you to find out where a variable is defined, where it is assigned to another variable, where a method is called etc. At least that's the idea. Since it doesn't use a database it's only suitable for smaller projects -- whatever that means.
+
+First, define which files belong to your project. Most likely your project's source files are already registered in your tags or manifest.txt files, which will be used if available. Alternatively you can set the variable [wbg]:trag_files to a list of files that will be used instead. (Setting this variable will prevent the use of tags.)
+
+Secondly, perform certain operations on these files, like:
+
+    - Select a file to edit
+    - Scan/search files for an expression (somewhat like grep)
+    - Provide for "modes", i.e. format the regular expression so that 
+      you can easily search for, e.g., only variable definitions or only 
+      function calls.
+
+
+:TRag[!] MODE REGEXP
+    Run |:TRagsearch| and instantly display the result with |:TRagcw|.
+    See |trag#Grep()| for help on the arguments.
+    Examples:
+      " Find any matches
+      TRag . foo
+
+      " Find variable definitions (word on the left-hand): foo = 1
+      TRag l foo
+    
+      " Find variable __or__ function/method definitions
+      TRag d,l foo
+    
+      " Find function calls like: foo(a, b)
+      TRag f foo
+
