@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-02-19.
-" @Revision:    0.0.448
+" @Last Change: 2008-02-26.
+" @Revision:    0.0.475
 
 if &cp || exists("loaded_trag_autoload")
     finish
@@ -178,8 +178,13 @@ function! trag#Grep(args, ...) "{{{3
     if replace
         call setqflist([])
     endif
+    let search_mode = g:trag_search_mode
     let scratch = {}
     try
+        if search_mode == 2
+            let ei = &ei
+            set ei=all
+        endif
         let fidx = 0
         for f in files
             " TLogVAR f
@@ -212,34 +217,38 @@ function! trag#Grep(args, ...) "{{{3
             " into a buffer and use search(), which should be faster than 
             " running match() on every line.
             if empty(prcacc)
-                " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/g '. f
-                " silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
-                if empty(scratch)
-                    let scratch = {'scratch': '__TRagFileScratch__'}
-                    call tlib#scratch#UseScratch(scratch)
-                    resize 1
-                    let lazyredraw = &lazyredraw
-                    set lazyredraw
-                endif
-                norm! ggdG
-                exec 'silent 0read '. tlib#arg#Ex(f)
-                norm! gg
-                let si = search(rxpos, 'cW')
-                while si
-                    let lnum = line('.')
-                    let line = getline(lnum)
-                    " TLogVAR lnum, line
-                    if empty(rxneg) || line !~ rxneg
-                        call add(qfl, {
-                                    \ 'filename': f,
-                                    \ 'lnum': lnum,
-                                    \ 'text': tlib#string#Strip(line),
-                                    \ })
+                if search_mode == 0
+                    if empty(scratch)
+                        let scratch = {'scratch': '__TRagFileScratch__'}
+                        call tlib#scratch#UseScratch(scratch)
+                        resize 1
+                        let lazyredraw = &lazyredraw
+                        set lazyredraw
                     endif
-                    silent! norm! j0
+                    norm! ggdG
+                    exec 'silent 0read '. tlib#arg#Ex(f)
+                    norm! gg
                     let si = search(rxpos, 'cW')
-                endwh
-                norm! ggdG
+                    while si
+                        let lnum = line('.')
+                        let line = getline(lnum)
+                        " TLogVAR lnum, line
+                        if empty(rxneg) || line !~ rxneg
+                            call add(qfl, {
+                                        \ 'filename': f,
+                                        \ 'lnum': lnum,
+                                        \ 'text': tlib#string#Strip(line),
+                                        \ })
+                        endif
+                        silent! norm! j0
+                        let si = search(rxpos, 'cW')
+                    endwh
+                    norm! ggdG
+                    call setqflist(qfl, 'a')
+                else
+                    " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. f
+                    silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
+                endif
             else
                 let lnum = 0
                 for line in readfile(f)
@@ -256,11 +265,14 @@ function! trag#Grep(args, ...) "{{{3
                                     \ })
                     endif
                 endfor
+                call setqflist(qfl, 'a')
             endif
-            " TLogVAR qfl, replace
-            call setqflist(qfl, replace ? 'r' : 'a')
         endfor
+        " TLogDBG 'qfl:'. string(getqflist())
     finally
+        if search_mode == 2
+            let &ei = ei
+        endif
         if !empty(scratch)
             call tlib#scratch#CloseScratch(scratch)
             let &lazyredraw = lazyredraw
@@ -407,8 +419,9 @@ function! trag#AgentEditQFE(world, selected, ...) "{{{3
         let idx = a:selected[0] - 1
         if idx >= 0
             let qfe = a:world.qfl[idx]
-            " TLogVAR qfe
+            " TLogVAR cmd_edit, cmd_buffer, qfe
             call tlib#file#With(cmd_edit, cmd_buffer, [s:GetFilename(qfe)], a:world)
+            " TLogDBG bufname('%')
             call tlib#buffer#ViewLine(qfe.lnum)
             " call a:world.SetOrigin()
         endif

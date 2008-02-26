@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-02-19.
-" @Revision:    0.2.444
+" @Last Change: 2008-02-26.
+" @Revision:    0.3.456
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
@@ -14,7 +14,7 @@ if !exists('g:loaded_tlib') || g:loaded_tlib < 15
     echoerr 'tlib >= 0.15 is required'
     finish
 endif
-let loaded_trag = 2
+let loaded_trag = 3
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -26,6 +26,15 @@ TLet g:trag_kinds = {}
 TLet g:trag_filenames = {}
 " :nodoc:
 TLet g:trag_keyword_chars = {}
+
+" 0 ... use the built-in search.
+" 1 ... use vimgrep.
+" 2 ... use vimgrep but set 'ei' to all; this means special file 
+"       encodings won't be detected
+" Please not, this is only in effect with simple searches (as for 0.3 
+" all searches are simple). For more complex multi-line patterns, the 
+" built-in search will be used (some day in the future).
+TLet g:trag_search_mode = 2
 
 " If no project files are defined, evaluate this expression as 
 " fallback-strategy.
@@ -126,7 +135,8 @@ TRagDefKind d ruby /\C\<\(def\s\+\(\u\w*\.\)*\|attr\(_\w\+\)\?\s\+\(:\w\+,\s\+\)
 " TRagDefKind f ruby /\C\(\<def\s\+\(\u\w*\.\)*\|:\)\@<!\<%s\>\s*\([(;]\|$\)/
 " TRagDefKind f ruby /\(;\|^\)\s*\<%s\>\s*\([(;]\|$\)/
 " TRagDefKind f ruby /\(;\|^\)\s*[^();]\{-}%s\s*\([(;]\|$\)/
-TRagDefKind f ruby /\(;\|^\)\s*%s\s*\([(;]\|$\)/
+" TRagDefKind f ruby /\(;\|^\)\s*%s\s*\([(;]\|$\)/
+TRagDefKind f ruby /\(def\s\+\)\@<!%s\s*\([(;]\|$\)/
 TRagDefKind i ruby /\C^\s*#.\{-}%s/
 TRagDefKind m ruby /\C\<module\s\+\(\u\w*::\)*%s/
 " TRagDefKind l ruby /\C\<%s\>\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
@@ -331,4 +341,11 @@ root" (^\w\+) as the current buffer (the command is thus slightly more
 useful and can be used as an ad-hoc alternative file switcher)
 - FIX: Match a line only once
 - FIX: Caching of regexps
+
+0.3
+- Use vimgrep with set ei=all as default search mode (can be configured 
+via g:trag_search_mode); by default trag now is a wrapper around vimgrep 
+that does the handling of project-related file-sets and regexp builing 
+for you.
+- FIX: ruby/f regexp
 
