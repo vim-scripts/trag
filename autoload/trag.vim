@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-02-26.
-" @Revision:    0.0.475
+" @Last Change: 2008-10-20.
+" @Revision:    0.0.516
 
 if &cp || exists("loaded_trag_autoload")
     finish
@@ -64,7 +64,7 @@ function! trag#SetFiles(...) "{{{3
                 " TLogVAR glob
                 let files = split(glob(glob), '\n')
             else
-                let proj = tlib#var#Get('trag_proj_'. &filetype, 'bg', tlib#var#Get('trag_proj', 'bg', ''))
+                let proj = tlib#var#Get('trag_project_'. &filetype, 'bg', tlib#var#Get('trag_project', 'bg', ''))
                 if !empty(proj)
                     " let proj = fnamemodify(proj, ':p')
                     let proj = findfile(proj, '.;')
@@ -116,11 +116,13 @@ function! trag#SetFiles(...) "{{{3
 endf
 
 
-" Edit a file from the project catalog. See |g:trag_proj| and 
+" Edit a file from the project catalog. See |g:trag_project| and 
 " |:TRagfile|.
 function! trag#Edit() "{{{3
     let w = tlib#World#New(copy(g:trag_edit_world))
     let w.base = s:GetFiles()
+    let w.show_empty = 1
+    let w.pick_last_item = 0
     call w.SetInitialFilter(matchstr(expand('%:t:r'), '^\w\+'))
     call w.Set_display_format('filename')
     " TLogVAR w.base
@@ -167,10 +169,10 @@ function! trag#Grep(args, ...) "{{{3
     TVarArg ['replace', 1], ['files', []]
     let [kindspos, kindsneg, rx] = s:SplitArgs(a:args)
     if empty(rx)
-        throw 'Malformed arguments (should be: "KIND REGEXP"): '. string(a:args)
+        let rx = '*'
+        " throw 'Malformed arguments (should be: "KIND REGEXP"): '. string(a:args)
     endif
     " TLogVAR kindspos, kindsneg, rx
-    let qfl = []
     if empty(files)
         let files = s:GetFiles()
     endif
@@ -185,13 +187,15 @@ function! trag#Grep(args, ...) "{{{3
             let ei = &ei
             set ei=all
         endif
-        let fidx = 0
+        let fidx  = 0
+        let strip = 0
         for f in files
             " TLogVAR f
             call tlib#progressbar#Display(fidx, ' '. f)
             let rxpos = s:GetRx(f, kindspos, rx, '.')
-            let rxneg = s:GetRx(f, kindsneg, rx, '')
-            " TLogVAR kindspos, kindsneg, rxpos, rxneg
+            " let rxneg = s:GetRx(f, kindsneg, rx, '')
+            let rxneg = s:GetRx(f, kindsneg, '', '')
+            " TLogVAR kindspos, kindsneg, rx, rxpos, rxneg
             let fidx += 1
             if !filereadable(f) || empty(rxpos)
                 " TLogDBG 'continue '.filereadable(f) .' '. empty(rxpos)
@@ -216,8 +220,9 @@ function! trag#Grep(args, ...) "{{{3
             " When we don't have to process every line, we slurp the file 
             " into a buffer and use search(), which should be faster than 
             " running match() on every line.
+            let qfl = []
             if empty(prcacc)
-                if search_mode == 0
+                if search_mode == 0 || !empty(rxneg)
                     if empty(scratch)
                         let scratch = {'scratch': '__TRagFileScratch__'}
                         call tlib#scratch#UseScratch(scratch)
@@ -227,12 +232,14 @@ function! trag#Grep(args, ...) "{{{3
                     endif
                     norm! ggdG
                     exec 'silent 0read '. tlib#arg#Ex(f)
+                    " exec '0read '. tlib#arg#Ex(f)
                     norm! gg
                     let si = search(rxpos, 'cW')
                     while si
                         let lnum = line('.')
                         let line = getline(lnum)
-                        " TLogVAR lnum, line
+                        " TLogVAR lnum, line, rxneg
+                        " TLogDBG line !~ rxneg
                         if empty(rxneg) || line !~ rxneg
                             call add(qfl, {
                                         \ 'filename': f,
@@ -247,7 +254,9 @@ function! trag#Grep(args, ...) "{{{3
                     call setqflist(qfl, 'a')
                 else
                     " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. f
-                    silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
+                    " silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
+                    silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/j '. tlib#arg#Ex(f)
+                    let strip = 1
                 endif
             else
                 let lnum = 0
@@ -268,6 +277,9 @@ function! trag#Grep(args, ...) "{{{3
                 call setqflist(qfl, 'a')
             endif
         endfor
+        if strip
+            call setqflist(map(getqflist(), 's:StripText(v:val)'), 'r')
+        endif
         " TLogDBG 'qfl:'. string(getqflist())
     finally
         if search_mode == 2
@@ -279,6 +291,12 @@ function! trag#Grep(args, ...) "{{{3
         endif
         call tlib#progressbar#Restore()
     endtry
+endf
+
+
+function! s:StripText(rec) "{{{3
+    let a:rec['text'] = tlib#string#Strip(a:rec['text'])
+    return a:rec
 endf
 
 
@@ -418,12 +436,15 @@ function! trag#AgentEditQFE(world, selected, ...) "{{{3
     else
         let idx = a:selected[0] - 1
         if idx >= 0
+            call a:world.RestoreOrigin()
             let qfe = a:world.qfl[idx]
+            " let back = a:world.SwitchWindow('win')
             " TLogVAR cmd_edit, cmd_buffer, qfe
             call tlib#file#With(cmd_edit, cmd_buffer, [s:GetFilename(qfe)], a:world)
             " TLogDBG bufname('%')
             call tlib#buffer#ViewLine(qfe.lnum)
             " call a:world.SetOrigin()
+            " exec back
         endif
     endif
     return a:world
@@ -454,7 +475,9 @@ endf
 function! trag#AgentWithSelected(world, selected) "{{{3
     let cmd = input('Ex command: ', '', 'command')
     if !empty(cmd)
+        call a:world.CloseScratch()
         for entry in a:selected
+            " TLogVAR entry
             call trag#AgentEditQFE(a:world, [entry])
             exec cmd
         endfor

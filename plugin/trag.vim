@@ -3,18 +3,21 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-02-26.
-" @Revision:    0.3.456
+" @Last Change: 2008-11-22.
+" @Revision:    0.4.482
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
     finish
 endif
 if !exists('g:loaded_tlib') || g:loaded_tlib < 15
-    echoerr 'tlib >= 0.15 is required'
-    finish
+    runtime plugin/02tlib.vim
+    if !exists('g:loaded_tlib') || g:loaded_tlib < 15
+        echoerr 'tlib >= 0.15 is required'
+        finish
+    endif
 endif
-let loaded_trag = 3
+let loaded_trag = 4
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -94,9 +97,9 @@ TRagDefKind identity * /\C%s/
 " Examples:
 " l foo =~ foo = 1
 " L foo =~ fufoo0 = 1
+TRagDefKind l * /\C%s\s*[^=]*=[^=~<>]/
 " TRagDefKind l * /\C\<%s\>\s*=[^=~<>]/
 " TRagDefKind L * /\C%s[^=]*=[^=~<>]/
-TRagDefKind l * /\C%s\s*[^=]*=[^=~<>]/
 
 " Right hand side value in an assignment.
 " Examples:
@@ -105,6 +108,9 @@ TRagDefKind l * /\C%s\s*[^=]*=[^=~<>]/
 " TRagDefKind r * /\C[^!=~<>]=.\{-}\<%s\>/
 " TRagDefKind R * /\C[^!=~<>]=.\{-}%s/
 TRagDefKind r * /\C[^!=~<>]=.\{-}%s/
+
+" Markers: TODO, TBD, FIXME, OPTIMIZE
+TRagDefKind todo * /\C\(TBD\|TODO\|FIXME\|OPTIMIZE\)/
 
 " A mostly general rx format string for function calls.
 " TRagDefKind f * /\C\<%s\>\s*(/
@@ -136,8 +142,9 @@ TRagDefKind d ruby /\C\<\(def\s\+\(\u\w*\.\)*\|attr\(_\w\+\)\?\s\+\(:\w\+,\s\+\)
 " TRagDefKind f ruby /\(;\|^\)\s*\<%s\>\s*\([(;]\|$\)/
 " TRagDefKind f ruby /\(;\|^\)\s*[^();]\{-}%s\s*\([(;]\|$\)/
 " TRagDefKind f ruby /\(;\|^\)\s*%s\s*\([(;]\|$\)/
-TRagDefKind f ruby /\(def\s\+\)\@<!%s\s*\([(;]\|$\)/
-TRagDefKind i ruby /\C^\s*#.\{-}%s/
+TRagDefKind f ruby /\(\<def\s\+\)\@<!%s\s*\([(;]\|$\)/
+" TRagDefKind i ruby /\C^\s*#.\{-}%s/
+TRagDefKind i ruby /\C^\s*#%s/
 TRagDefKind m ruby /\C\<module\s\+\(\u\w*::\)*%s/
 " TRagDefKind l ruby /\C\<%s\>\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
 TRagDefKind l ruby /\C%s\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
@@ -153,7 +160,9 @@ TRagDefKind d vim /\C\<\(fu\%%[nction]!\?\s\+\|com\%%[mand]!\?\s\+\(-\S\+\s\+\)*
 " TRagDefKind f vim /\C\(\(^\s*\<fu\%%[nction]!\?\s\+\(s:\)\?\|com\%%[mand]!\?\(\s\+-\S\+\)*\s\+\)\@<!\<%s\>\s*(\|\(^\||\)\s*\<%s\>\)/
 " TRagDefKind F vim /\C\(\(^\s*\<fu\%%[nction]!\?\s\+\(s:\)\?\|com\%%[mand]\(\s\+-\S\+\)*\s\+\)\@<!\S\{-}%s\S\{-}(\|\(^\||\)\s*%s\)/
 TRagDefKind f vim /\C\(\(^\s*\<fu\%%[nction]!\?\s\+\(s:\)\?\|com\%%[mand]\(\s\+-\S\+\)*\s\+\)\@<!\S\{-}%s\S\{-}(\|\(^\||\)\s*%s\)/
-TRagDefKind i vim /\C^\s*".\{-}%s/
+" TRagDefKind i vim /\C^\s*".\{-}%s/
+" This isn't correct. It doesn't find in-line comments.
+TRagDefKind i vim /\C^\s*"%s/
 " TRagDefKind r vim /\C^\s*let\s\+\S\+\s*=.\{-}\<%s\>/
 " TRagDefKind R vim /\C^\s*let\s\+\S\+\s*=.\{-}%s/
 TRagDefKind r vim /\C^\s*let\s\+\S\+\s*=[^|]\{-}%s/
@@ -206,28 +215,31 @@ TLet g:trag_qfl_world = {
 " Run |:TRagsearch| and instantly display the result with |:TRagcw|.
 " See |trag#Grep()| for help on the arguments.
 " Examples: >
-"   " Find any matches
-"   TRag . foo
-"
-"   " Find as word
-"   TRag w foo
-"
-"   " Find variable definitions like: foo = 1
-"   TRag v foo
-"
-"   " Find function calls like: foo(a, b)
-"   TRag f foo
+"     " Find any matches
+"     TRag . foo
+" 
+"     " Find variable definitions (word on the left-hand): foo = 1
+"     TRag l foo
+" 
+"     " Find variable __or__ function/method definitions
+"     TRag d,l foo
+" 
+"     " Find function calls like: foo(a, b)
+"     TRag f foo
 command! -nargs=1 -bang -bar TRag TRagsearch<bang> <args> | TRagcw
+command! -nargs=1 -bang -bar Trag TRag<bang> <args>
 
 
 " :display: :TRagfile
 " Edit a file registered in your tag files.
 command! TRagfile call trag#Edit()
+command! Tragfile call trag#Edit()
 
 
 " :display: :TRagcw
 " Display a quick fix list using |tlib#input#ListD()|.
 command! TRagcw call trag#QuickList()
+command! Tragcw call trag#QuickList()
 
 
 " :display: :TRagsearch[!] KIND REGEXP
@@ -241,9 +253,10 @@ command! TRagcw call trag#QuickList()
 " through your sources.
 " See |trag#Grep()| for help on the arguments.
 command! -nargs=1 -bang -bar TRagsearch call trag#Grep(<q-args>, empty("<bang>"))
+command! -nargs=1 -bang -bar Tragsearch TRagsearch<bang> <args>
 
 
-" :display: :TRaggrep KIND REGEXP GLOBPATTERN
+" :display: :TRaggrep REGEXP GLOBPATTERN
 " A 80%-replacement for grep.
 "
 " Example: >
@@ -252,10 +265,11 @@ command! -nargs=1 -bang -bar TRagsearch call trag#Grep(<q-args>, empty("<bang>")
 " Note: In comparison with |:vimgrep| or |:grep|, this comand still 
 " takes an extra |trag-kinds| argument.
 command! -nargs=+ -bang -bar -complete=file TRaggrep
-            \ let g:trag_grepargs = [<f-args>]
+            \ let g:trag_grepargs = ['.', <f-args>]
             \ | call trag#Grep(g:trag_grepargs[0] .' '. g:trag_grepargs[1], empty("<bang>"), split(glob(g:trag_grepargs[2]), "\n"))
             \ | unlet g:trag_grepargs
             \ | TRagcw
+command! -nargs=+ -bang -bar -complete=file Traggrep TRaggrep<bang> <args>
 
 
 " :doc:
@@ -275,10 +289,10 @@ TLet g:trag_glob = ''
 
 " The name of a file containing the projects file list. This file could be 
 " generated via make. Can be buffer local.
-TLet g:trag_proj = ''
+TLet g:trag_project = ''
 
 " Filetype-specific project files.
-TLet g:trag_proj_ruby = 'Manifest.txt'
+TLet g:trag_project_ruby = 'Manifest.txt'
 
 
 " :display: :TRagsetfiles [FILELIST]
@@ -330,12 +344,12 @@ value)
 for the word "call" but ignore matches in comments (if defined for the 
     current filetype)
 - Alternative methods to define project files: g:trag_files, 
-g:trag_glob, g:trag_proj.
+g:trag_glob, g:trag_project.
 - Improved support for ruby, vim
 - TRagKeyword, trag#CWord(): Customize keyword rx.
 - g:trag_get_files
-- [bg]:trag_proj_{&filetype}: Name of the filetype-specific project 
-files catalog (overrides [bg]:trag_proj if defined)
+- [bg]:trag_project_{&filetype}: Name of the filetype-specific project 
+files catalog (overrides [bg]:trag_project if defined)
 - trag#Edit() will now initally select files with the same "basename 
 root" (^\w\+) as the current buffer (the command is thus slightly more 
 useful and can be used as an ad-hoc alternative file switcher)
@@ -348,4 +362,14 @@ via g:trag_search_mode); by default trag now is a wrapper around vimgrep
 that does the handling of project-related file-sets and regexp builing 
 for you.
 - FIX: ruby/f regexp
+
+0.4
+- Make sure tlib is loaded even if it is installed in a different 
+rtp-directory.
+- Post-process lines (strip whitespace) collected by vimgrep
+- tlib#Edit(): for list input, set pick_last_item=0, show_empty=1
+- Aliases for some commands: Trag, Traggrep ...
+- trag_proj* variables were renamed to trag_project*.
+- Traggrep: Arguments have changed for conformity with grep commands (an 
+implicit .-argument is prepended)
 
