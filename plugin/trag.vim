@@ -1,10 +1,10 @@
 " trag.vim -- Jump to a file registered in your tags
-" @Author:      Thomas Link (micathom AT gmail com?subject=[vim])
+" @Author:      Tom Link (micathom AT gmail com?subject=[vim])
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-11-22.
-" @Revision:    0.4.482
+" @Last Change: 2009-02-25.
+" @Revision:    548
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
@@ -17,7 +17,7 @@ if !exists('g:loaded_tlib') || g:loaded_tlib < 15
         finish
     endif
 endif
-let loaded_trag = 4
+let loaded_trag = 5
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -42,6 +42,9 @@ TLet g:trag_search_mode = 2
 " If no project files are defined, evaluate this expression as 
 " fallback-strategy.
 TLet g:trag_get_files = 'split(glob("*"), "\n")'
+TLet g:trag_get_files_java = 'split(glob("**/*.java"), "\n")'
+TLet g:trag_get_files_c = 'split(glob("**/*.[ch]"), "\n")'
+TLet g:trag_get_files_cpp = 'split(glob("**/*.[ch]"), "\n")'
 
 
 " :nodoc:
@@ -54,7 +57,7 @@ function! s:TRagDefKind(args) "{{{3
         call add(var, filetype)
     endif
     let varname = join(var, '_')
-    let {varname} = regexp
+    let {varname} = substitute(regexp, '\\/', '/', 'g')
     if has_key(g:trag_kinds, kind)
         call add(g:trag_kinds[kind], filetype)
     else
@@ -125,10 +128,15 @@ TRagDefKind fuzzy * /\c%{fuzzyrx}/
 
 
 TRagDefFiletype java java
-TRagDefKind c java /\C^\s*\(final\s\+\)\?\(\(public\|protected\|private\)\s\+\)\?class\s\+%s/
-TRagDefKind d java /\C^\s*\(final\s\+\)\?\(\(public\|protected\|private\)\s\+\)\?\(\w\+\(\[\]\)*\)\s\+%s\s*(/
-TRagDefKind f java /\(;\|^\)\s*[^();]\{-}%s\s*\([(;]\|$\)/
-TRagDefKind i java /\C^\/\*.\{-}%s.\{-}\*\//
+let s:java_mod = '\(\<\(final\|public\|protected\|private\|synchronized\|volatile\|abstract\)\s\+\)*'
+let s:java_type = '\(boolean\|byte\|short\|int\|long\|float\|double\|char\|void\|\u[[:alnum:]_.]*\)\s\+'
+exec 'TRagDefKind c java /\C^\s*'. s:java_mod .'class\s\+%s/'
+exec 'TRagDefKind d java /\C^\s*'. s:java_mod .'\(\w\+\(\[\]\)*\)\s\+%s\s*(/'
+exec 'TRagDefKind f java /\(\(;\|{\|^\)\s*'. s:java_mod . s:java_type .'\)\@<!%s\s*\([(;]\|$\)/'
+TRagDefKind i java /\C^\s*\(\/\/\|\/\*\).\{-}%s/
+TRagDefKind x java /\C^.\{-}\<\(interface\|class\)\s\+.\{-}\s\+\(extends\|implements\)\s\+%s/
+unlet s:java_mod s:java_type
+
 
 
 TRagDefFiletype ruby rb
@@ -148,6 +156,7 @@ TRagDefKind i ruby /\C^\s*#%s/
 TRagDefKind m ruby /\C\<module\s\+\(\u\w*::\)*%s/
 " TRagDefKind l ruby /\C\<%s\>\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
 TRagDefKind l ruby /\C%s\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
+TRagDefKind x ruby /\C\s\*class\>.\{-}<\s*%s/
 
 
 TRagDefFiletype vim vim .vimrc _vimrc
@@ -177,6 +186,7 @@ TRagDefKind d viki /\C^\s*#\u\w*\s\+.\{-}\(id=%s\|%s=\)/
 TRagDefKind h viki /\C^\*\+\s\+%s/
 TRagDefKind l viki /\C^\s\+%s\s\+::/
 TRagDefKind r viki /\C^\s\+\(.\{-}\s::\|[-+*#]\|[@?].\)\s\+%s/
+TRagDefKind todo viki /\C\(TODO\|FIXME\|+++\|!!!\|###\|???\)/
 
 
 " :nodoc:
@@ -200,8 +210,9 @@ TLet g:trag_qfl_world = {
             \ 'tlib_UseInputListScratch': 'syn match TTagedFilesFilename / \zs.\{-}\ze|\d\+| / | syn match TTagedFilesLNum /|\d\+|/ | hi def link TTagedFilesFilename Directory | hi def link TTagedFilesLNum LineNr',
             \ 'key_handlers': [
                 \ {'key':  5, 'agent': 'trag#AgentWithSelected', 'key_name': '<c-e>', 'help': 'Run a command on selected lines'},
-                \ {'key': 16, 'agent': 'trag#AgentPreviewQFE',  'key_name': '<c-p>', 'help': 'Preview'},
-                \ {'key': 60, 'agent': 'trag#AgentGotoQFE',     'key_name': '<',     'help': 'Jump (don''t close the list)'},
+                \ {'key':  6, 'agent': 'trag#AgentRefactor',     'key_name': '<c-f>', 'help': 'Run a refactor command'},
+                \ {'key': 16, 'agent': 'trag#AgentPreviewQFE',   'key_name': '<c-p>', 'help': 'Preview'},
+                \ {'key': 60, 'agent': 'trag#AgentGotoQFE',      'key_name': '<',     'help': 'Jump (don''t close the list)'},
                 \ {'key': 19, 'agent': 'trag#AgentSplitBuffer',  'key_name': '<c-s>', 'help': 'Show in split buffer'},
                 \ {'key': 20, 'agent': 'trag#AgentTabBuffer',    'key_name': '<c-t>', 'help': 'Show in tab'},
                 \ {'key': 22, 'agent': 'trag#AgentVSplitBuffer', 'key_name': '<c-v>', 'help': 'Show in vsplit buffer'},
@@ -211,9 +222,12 @@ TLet g:trag_qfl_world = {
                 " \ {'key': 23, 'agent': 'trag#AgentOpenBuffer',   'key_name': '<c-w>', 'help': 'View in window'},
 
 
-" :display: :TRag[!] KIND REGEXP
+" :display: :TRag[!] KIND [REGEXP]
 " Run |:TRagsearch| and instantly display the result with |:TRagcw|.
 " See |trag#Grep()| for help on the arguments.
+" If the kind rx doesn't contain %s (e.g. todo), you can skip the 
+" regexp.
+"
 " Examples: >
 "     " Find any matches
 "     TRag . foo
@@ -226,6 +240,9 @@ TLet g:trag_qfl_world = {
 " 
 "     " Find function calls like: foo(a, b)
 "     TRag f foo
+"
+"     " Find TODO markers
+"     TRag todo
 command! -nargs=1 -bang -bar TRag TRagsearch<bang> <args> | TRagcw
 command! -nargs=1 -bang -bar Trag TRag<bang> <args>
 
@@ -256,17 +273,15 @@ command! -nargs=1 -bang -bar TRagsearch call trag#Grep(<q-args>, empty("<bang>")
 command! -nargs=1 -bang -bar Tragsearch TRagsearch<bang> <args>
 
 
-" :display: :TRaggrep REGEXP GLOBPATTERN
-" A 80%-replacement for grep.
+" :display: :TRaggrep REGEXP [GLOBPATTERN]
+" A 99%-replacement for grep. The glob pattern is optional.
 "
 " Example: >
-"   :TRaggrep . foo *.vim
-" < 
-" Note: In comparison with |:vimgrep| or |:grep|, this comand still 
-" takes an extra |trag-kinds| argument.
+"   :TRaggrep foo *.vim
+"   :TRaggrep bar
 command! -nargs=+ -bang -bar -complete=file TRaggrep
             \ let g:trag_grepargs = ['.', <f-args>]
-            \ | call trag#Grep(g:trag_grepargs[0] .' '. g:trag_grepargs[1], empty("<bang>"), split(glob(g:trag_grepargs[2]), "\n"))
+            \ | call trag#Grep(g:trag_grepargs[0] .' '. g:trag_grepargs[1], empty("<bang>"), split(glob(get(g:trag_grepargs, 2, '')), "\n"))
             \ | unlet g:trag_grepargs
             \ | TRagcw
 command! -nargs=+ -bang -bar -complete=file Traggrep TRaggrep<bang> <args>
@@ -364,12 +379,21 @@ for you.
 - FIX: ruby/f regexp
 
 0.4
+- trag_proj* variables were renamed to trag_project*.
+- Traggrep: Arguments have changed for conformity with grep commands (an 
+implicit .-argument is prepended)
 - Make sure tlib is loaded even if it is installed in a different 
 rtp-directory.
 - Post-process lines (strip whitespace) collected by vimgrep
 - tlib#Edit(): for list input, set pick_last_item=0, show_empty=1
 - Aliases for some commands: Trag, Traggrep ...
-- trag_proj* variables were renamed to trag_project*.
-- Traggrep: Arguments have changed for conformity with grep commands (an 
-implicit .-argument is prepended)
+
+0.5
+- Update the qfl when running a command on selected lines
+- Enable certain operations for multiple choices
+- Java, Ruby: x ... find subclasses (extends/implements)
+- Experimental rename command for refactoring (general, java)
+- NEW: [bg]:trag_get_files_{&filetype}
+- Traggrep: If the second argument (glob pattern) is missing, the 
+default file list will be used.
 

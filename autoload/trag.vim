@@ -1,15 +1,18 @@
 " trag.vim
-" @Author:      Thomas Link (mailto:micathom AT gmail com?subject=[vim])
+" @Author:      Tom Link (mailto:micathom AT gmail com?subject=[vim])
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2008-10-20.
-" @Revision:    0.0.516
+" @Last Change: 2009-02-25.
+" @Revision:    0.0.635
 
 if &cp || exists("loaded_trag_autoload")
     finish
 endif
 let loaded_trag_autoload = 1
+
+    
+let s:grep_rx = ''
 
 
 function! s:GetFiles() "{{{3
@@ -20,8 +23,14 @@ function! s:GetFiles() "{{{3
         " echohl Error
         " echoerr 'TRag: No project files'
         " echohl NONE
-        echom 'TRag: No project files ... use: '. g:trag_get_files
-        let b:trag_files_ = eval(g:trag_get_files)
+        let trag_get_files = tlib#var#Get('trag_get_files_'. &filetype, 'bg', '')
+        " TLogVAR trag_get_files
+        if empty(trag_get_files)
+            let trag_get_files = tlib#var#Get('trag_get_files', 'bg', '')
+            " TLogVAR trag_get_files
+        endif
+        echom 'TRag: No project files ... use: '. trag_get_files
+        let b:trag_files_ = eval(trag_get_files)
     endif
     " TLogVAR b:trag_files_
     return b:trag_files_
@@ -57,7 +66,7 @@ function! trag#SetFiles(...) "{{{3
     if empty(files)
         unlet! files
         let files = tlib#var#Get('trag_files', 'bg', [])
-        " TLogVAR files
+        " TLogVAR files, empty(files)
         if empty(files)
             let glob = tlib#var#Get('trag_glob', 'bg', '')
             if !empty(glob)
@@ -65,6 +74,7 @@ function! trag#SetFiles(...) "{{{3
                 let files = split(glob(glob), '\n')
             else
                 let proj = tlib#var#Get('trag_project_'. &filetype, 'bg', tlib#var#Get('trag_project', 'bg', ''))
+                " TLogVAR proj
                 if !empty(proj)
                     " let proj = fnamemodify(proj, ':p')
                     let proj = findfile(proj, '.;')
@@ -172,9 +182,11 @@ function! trag#Grep(args, ...) "{{{3
         let rx = '*'
         " throw 'Malformed arguments (should be: "KIND REGEXP"): '. string(a:args)
     endif
-    " TLogVAR kindspos, kindsneg, rx
+    let s:grep_rx = rx
+    " TLogVAR kindspos, kindsneg, rx, files
     if empty(files)
         let files = s:GetFiles()
+        " TLogVAR files
     endif
     call tlib#progressbar#Init(len(files), 'TRag: Grep %s', 20)
     if replace
@@ -189,8 +201,8 @@ function! trag#Grep(args, ...) "{{{3
         endif
         let fidx  = 0
         let strip = 0
+        " TLogVAR files
         for f in files
-            " TLogVAR f
             call tlib#progressbar#Display(fidx, ' '. f)
             let rxpos = s:GetRx(f, kindspos, rx, '.')
             " let rxneg = s:GetRx(f, kindsneg, rx, '')
@@ -198,9 +210,10 @@ function! trag#Grep(args, ...) "{{{3
             " TLogVAR kindspos, kindsneg, rx, rxpos, rxneg
             let fidx += 1
             if !filereadable(f) || empty(rxpos)
-                " TLogDBG 'continue '.filereadable(f) .' '. empty(rxpos)
+                " TLogDBG f .': continue '. filereadable(f) .' '. empty(rxpos)
                 continue
             endif
+            " TLogVAR f
             let fext = fnamemodify(f, ':e')
             let prcacc = []
             " TODO: This currently doesn't work.
@@ -253,7 +266,8 @@ function! trag#Grep(args, ...) "{{{3
                     norm! ggdG
                     call setqflist(qfl, 'a')
                 else
-                    " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. f
+                    " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
+                    " TLogVAR len(getqflist())
                     " silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
                     silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/j '. tlib#arg#Ex(f)
                     let strip = 1
@@ -310,7 +324,7 @@ function! s:SplitArgs(args) "{{{3
         let kind = substitute(kind, '#', '', 'g')
         let rx = tlib#rx#Escape(rx)
     endif
-    let kinds = split(kind, '!', 1)
+    let kinds = split(kind, '[!-]', 1)
     let kindspos = s:SplitArgList(get(kinds, 0, ''), [['identity']])
     let kindsneg = s:SplitArgList(get(kinds, 1, ''), [])
     " TLogVAR a:args, kinds, kind, rx, kindspos, kindsneg
@@ -421,11 +435,15 @@ function! trag#QuickList() "{{{3
     let w = tlib#World#New(copy(g:trag_qfl_world))
     let w.qfl  = copy(getqflist())
     " TLogVAR w.qfl
-    let w.base = map(copy(w.qfl), 's:FormatQFLE(v:val)')
+    call s:FormatBase(w)
     " TLogVAR w.base
     call tlib#input#ListW(w)
 endf
 
+
+function! s:FormatBase(world) "{{{3
+    let a:world.base = map(copy(a:world.qfl), 's:FormatQFLE(v:val)')
+endf
 
 function! trag#AgentEditQFE(world, selected, ...) "{{{3
     TVarArg ['cmd_edit', 'edit'], ['cmd_buffer', 'buffer']
@@ -434,24 +452,32 @@ function! trag#AgentEditQFE(world, selected, ...) "{{{3
         call a:world.RestoreOrigin()
         " call a:world.ResetSelected()
     else
-        let idx = a:selected[0] - 1
-        if idx >= 0
-            call a:world.RestoreOrigin()
-            let qfe = a:world.qfl[idx]
-            " let back = a:world.SwitchWindow('win')
-            " TLogVAR cmd_edit, cmd_buffer, qfe
-            call tlib#file#With(cmd_edit, cmd_buffer, [s:GetFilename(qfe)], a:world)
-            " TLogDBG bufname('%')
-            call tlib#buffer#ViewLine(qfe.lnum)
-            " call a:world.SetOrigin()
-            " exec back
-        endif
+        call a:world.RestoreOrigin()
+        for idx in a:selected
+            let idx -= 1
+            " TLogVAR idx
+            if idx >= 0
+                " TLogVAR a:world.qfl
+                " call tlog#Debug(string(map(copy(a:world.qfl), 's:GetFilename(v:val)')))
+                " call tlog#Debug(string(map(copy(a:world.qfl), 'v:val.bufnr')))
+                " TLogVAR idx, a:world.qfl[idx]
+                let qfe = a:world.qfl[idx]
+                " let back = a:world.SwitchWindow('win')
+                " TLogVAR cmd_edit, cmd_buffer, qfe
+                call tlib#file#With(cmd_edit, cmd_buffer, [s:GetFilename(qfe)], a:world)
+                " TLogDBG bufname('%')
+                call tlib#buffer#ViewLine(qfe.lnum)
+                " call a:world.SetOrigin()
+                " exec back
+            endif
+        endfor
     endif
     return a:world
 endf 
 
 
 function! trag#AgentPreviewQFE(world, selected) "{{{3
+    " TLogVAR a:selected
     let back = a:world.SwitchWindow('win')
     call trag#AgentEditQFE(a:world, a:selected[0:0])
     exec back
@@ -475,17 +501,31 @@ endf
 function! trag#AgentWithSelected(world, selected) "{{{3
     let cmd = input('Ex command: ', '', 'command')
     if !empty(cmd)
-        call a:world.CloseScratch()
-        for entry in a:selected
-            " TLogVAR entry
-            call trag#AgentEditQFE(a:world, [entry])
-            exec cmd
-        endfor
-        call a:world.RestoreOrigin()
-        let a:world.state = 'reset'
+        call trag#RunCmdOnSelected(a:world, a:selected, cmd)
     else
         let a:world.state = 'redisplay'
     endif
+    return a:world
+endf
+
+
+function! trag#RunCmdOnSelected(world, selected, cmd) "{{{3
+    call a:world.CloseScratch()
+    " TLogVAR a:cmd
+    for entry in a:selected
+        " TLogVAR entry, a:world.GetBaseItem(entry)
+        call trag#AgentEditQFE(a:world, [entry])
+        " TLogDBG bufname('%')
+        exec a:cmd
+        " let item = a:world.qfl[a:world.GetBaseIdx(entry - 1)]
+        " <+TODO+>
+        let item = a:world.qfl[entry - 1]
+        " TLogVAR entry, item, getline('.')
+        let item['text'] = tlib#string#Strip(getline('.'))
+    endfor
+    call s:FormatBase(a:world)
+    call a:world.RestoreOrigin()
+    let a:world.state = 'reset'
     return a:world
 endf
 
@@ -512,6 +552,20 @@ endf
 " endf
 
 
+" Invoke an refactor command.
+" Currently only one command is supported: rename
+function! trag#AgentRefactor(world, selected) "{{{3
+    call a:world.CloseScratch()
+    let cmds = ['Rename']
+    let cmd = tlib#input#List('s', 'Select command', cmds)
+    if !empty(cmd)
+        return trag#Refactor{cmd}(a:world, a:selected)
+    endif
+    let a:world.state = 'reset'
+    return a:world
+endf
+
+
 function! trag#CWord() "{{{3
     if has_key(g:trag_keyword_chars, &filetype)
         let line  = getline('.')
@@ -526,5 +580,27 @@ function! trag#CWord() "{{{3
     endif
     " TLogVAR word
     return word
+endf
+
+
+function! trag#RefactorRename(world, selected) "{{{3
+    " TLogVAR a:selected
+    let from = input('Rename ', s:grep_rx)
+    if !empty(from)
+        let to = input('Rename '. from .' to: ', from)
+        if !empty(to)
+            let ft = a:world.filetype
+            let fn = 'trag#'. ft .'#Rename'
+            " TLogVAR ft, exists('*'. fn)
+            try
+                return call(fn, [a:world, a:selected, from, to])
+            catch /^Vim\%((\a\+)\)\=:E117/
+                " TLogDBG "General"
+                return trag#general#Rename(a:world, a:selected, from, to)
+            endtry
+        endif
+    endif
+    let a:world.state = 'reset'
+    return a:world
 endf
 
