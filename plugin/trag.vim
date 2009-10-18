@@ -3,17 +3,17 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2009-02-25.
-" @Revision:    548
+" @Last Change: 2009-08-04.
+" @Revision:    584
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
     finish
 endif
-if !exists('g:loaded_tlib') || g:loaded_tlib < 15
+if !exists('g:loaded_tlib') || g:loaded_tlib < 32
     runtime plugin/02tlib.vim
-    if !exists('g:loaded_tlib') || g:loaded_tlib < 15
-        echoerr 'tlib >= 0.15 is required'
+    if !exists('g:loaded_tlib') || g:loaded_tlib < 32
+        echoerr 'tlib >= 0.32 is required'
         finish
     endif
 endif
@@ -45,6 +45,15 @@ TLet g:trag_get_files = 'split(glob("*"), "\n")'
 TLet g:trag_get_files_java = 'split(glob("**/*.java"), "\n")'
 TLet g:trag_get_files_c = 'split(glob("**/*.[ch]"), "\n")'
 TLet g:trag_get_files_cpp = 'split(glob("**/*.[ch]"), "\n")'
+
+" " If non-empty, display signs at matching lines.
+" TLet g:trag_sign = has('signs') ? '>' : ''
+" if !empty(g:trag_sign)
+"     exec 'sign define TRag text='. g:trag_sign .' texthl=Special'
+" 
+"     " Clear all trag-related signs.
+"     command! TRagClearSigns call tlib#signs#ClearAll('TRag')
+" endif
 
 
 " :nodoc:
@@ -99,26 +108,26 @@ TRagDefKind identity * /\C%s/
 " Left hand side value in an assignment.
 " Examples:
 " l foo =~ foo = 1
-" L foo =~ fufoo0 = 1
 TRagDefKind l * /\C%s\s*[^=]*=[^=~<>]/
 " TRagDefKind l * /\C\<%s\>\s*=[^=~<>]/
+" L foo =~ fufoo0 = 1
 " TRagDefKind L * /\C%s[^=]*=[^=~<>]/
 
 " Right hand side value in an assignment.
 " Examples:
-" l foo =~ bar = foo
+" r foo =~ bar = foo
+TRagDefKind r * /\C[^!=~<>]=.\{-}%s/
 " L foo =~ bar = fufoo0
 " TRagDefKind r * /\C[^!=~<>]=.\{-}\<%s\>/
 " TRagDefKind R * /\C[^!=~<>]=.\{-}%s/
-TRagDefKind r * /\C[^!=~<>]=.\{-}%s/
 
 " Markers: TODO, TBD, FIXME, OPTIMIZE
 TRagDefKind todo * /\C\(TBD\|TODO\|FIXME\|OPTIMIZE\)/
 
 " A mostly general rx format string for function calls.
+TRagDefKind f * /\C%s\S*\s*(/
 " TRagDefKind f * /\C\<%s\>\s*(/
 " TRagDefKind F * /\C%s\S*\s*(/
-TRagDefKind f * /\C%s\S*\s*(/
 
 " A mostly general rx format string for words.
 TRagDefKind w * /\C\<%s\>/
@@ -216,6 +225,7 @@ TLet g:trag_qfl_world = {
                 \ {'key': 19, 'agent': 'trag#AgentSplitBuffer',  'key_name': '<c-s>', 'help': 'Show in split buffer'},
                 \ {'key': 20, 'agent': 'trag#AgentTabBuffer',    'key_name': '<c-t>', 'help': 'Show in tab'},
                 \ {'key': 22, 'agent': 'trag#AgentVSplitBuffer', 'key_name': '<c-v>', 'help': 'Show in vsplit buffer'},
+                \ {'key': "\<c-insert>", 'agent': 'trag#SetFollowCursor', 'key_name': '<c-ins>', 'help': 'Toggle trace cursor'},
             \ ],
             \ 'return_agent': 'trag#AgentEditQFE',
             \ }
@@ -255,8 +265,12 @@ command! Tragfile call trag#Edit()
 
 " :display: :TRagcw
 " Display a quick fix list using |tlib#input#ListD()|.
-command! TRagcw call trag#QuickList()
-command! Tragcw call trag#QuickList()
+command! -nargs=? TRagcw call trag#QuickList()
+command! -nargs=? Tragcw call trag#QuickList()
+
+" :display: :Traglw
+" Display a |location-list| using |tlib#input#ListD()|.
+command! -nargs=? Traglw call trag#LocList()
 
 
 " :display: :TRagsearch[!] KIND REGEXP
@@ -293,22 +307,30 @@ command! -nargs=+ -bang -bar -complete=file Traggrep TRaggrep<bang> <args>
 "
 " These variables are tested in the order as listed here. If the value 
 " of a variable is non-empty, this one will be used instead of the other 
-" methods. The tags files are last.
+" methods.
+"
+" The tags file is used as a last ressort.
 
-" A list of files. Can be buffer local.
+" 1. A list of files. Can be buffer local.
 TLet g:trag_files = []
 
-" A glob pattern -- this should be an absolute path and may contain ** 
+" 2. A glob pattern -- this should be an absolute path and may contain ** 
 " (see |glob()| and |wildcards|). Can be buffer local.
 TLet g:trag_glob = ''
 
-" The name of a file containing the projects file list. This file could be 
+" 3. Filetype-specific project files.
+TLet g:trag_project_ruby = 'Manifest.txt'
+
+" 4. The name of a file containing the projects file list. This file could be 
 " generated via make. Can be buffer local.
 TLet g:trag_project = ''
 
-" Filetype-specific project files.
-TLet g:trag_project_ruby = 'Manifest.txt'
-
+" 5. The name of a git repository that includes all files of interest. 
+" If the value is "*", trag will search from the current directory 
+" (|getcwd()|) upwards for a .git directory.
+" If the value is "finddir", use |finddir()| to find a .git directory.
+" Can be buffer local.
+TLet g:trag_git = ''
 
 " :display: :TRagsetfiles [FILELIST]
 " The file list is set only once per buffer. If the list of the project 
@@ -329,6 +351,9 @@ command! -nargs=1 -bar -complete=file TRagaddfiles call trag#AddFiles(<args>)
 " :display: :TRagclearfiles
 " Remove any files from the project list.
 command! TRagclearfiles call trag#ClearFiles()
+
+" :display: :TRagGitFiles GIT_REPOS
+command! -nargs=1 -bar -complete=dir TRagGitFiles call trag#SetGitFiles(<q-args>)
 
 
 let &cpo = s:save_cpo
@@ -396,4 +421,11 @@ rtp-directory.
 - NEW: [bg]:trag_get_files_{&filetype}
 - Traggrep: If the second argument (glob pattern) is missing, the 
 default file list will be used.
+
+0.6
+- trag#viki#Rename()
+- Generalized trag#rename#Rename()
+- Enabled "trace cursor" functionality (mapped to the <c-insert> key).
+- :Traglw
+- TRagGitFiles, trag#SetGitFiles(), g:trag_git
 
