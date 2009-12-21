@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2009-08-05.
-" @Revision:    0.0.691
+" @Last Change: 2009-12-21.
+" @Revision:    0.0.743
 
 if &cp || exists("loaded_trag_autoload")
     finish
@@ -243,22 +243,27 @@ endf
 "   if foo == 1
 function! trag#Grep(args, ...) "{{{3
     TVarArg ['replace', 1], ['files', []]
+    " TLogVAR replace, files
     let [kindspos, kindsneg, rx] = s:SplitArgs(a:args)
+    " TLogVAR kindspos, kindsneg, rx, a:args
     if empty(rx)
-        let rx = '*'
+        let rx = '.\{-}'
         " throw 'Malformed arguments (should be: "KIND REGEXP"): '. string(a:args)
     endif
+    " TAssertType rx, 'string'
     let s:grep_rx = rx
     " TLogVAR kindspos, kindsneg, rx, files
     if empty(files)
         let files = s:GetFiles()
         " TLogVAR files
     endif
+    " TAssertType files, 'list'
     call tlib#progressbar#Init(len(files), 'TRag: Grep %s', 20)
     if replace
         call setqflist([])
     endif
     let search_mode = g:trag_search_mode
+    " TLogVAR search_mode
     let scratch = {}
     try
         if search_mode == 2
@@ -299,7 +304,6 @@ function! trag#Grep(args, ...) "{{{3
             " When we don't have to process every line, we slurp the file 
             " into a buffer and use search(), which should be faster than 
             " running match() on every line.
-            let qfl = []
             if empty(prcacc)
                 if search_mode == 0 || !empty(rxneg)
                     if empty(scratch)
@@ -311,34 +315,20 @@ function! trag#Grep(args, ...) "{{{3
                     endif
                     norm! ggdG
                     exec 'silent 0read '. tlib#arg#Ex(f)
-                    exec '0read '. tlib#arg#Ex(f)
-                    norm! gg
-                    let si = search(rxpos, 'cW')
-                    while si
-                        let lnum = line('.')
-                        let line = getline(lnum)
-                        " TLogVAR lnum, line, rxneg
-                        " TLogDBG line !~ rxneg
-                        if empty(rxneg) || line !~ rxneg
-                            call add(qfl, {
-                                        \ 'filename': f,
-                                        \ 'lnum': lnum,
-                                        \ 'text': tlib#string#Strip(line),
-                                        \ })
-                        endif
-                        silent! norm! j0
-                        let si = search(rxpos, 'cW')
-                    endwh
+                    let qfl = {}
+                    silent exec 'g/'. escape(rxpos, '/') .'/ call s:AddCurrentLine(f, qfl, rxneg)'
                     norm! ggdG
-                    call setqflist(qfl, 'a')
+                    " TLogVAR qfl
+                    call setqflist(values(qfl), 'a')
                 else
-                    " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
+                    " TLogDBG 'vimgrepadd /'. escape(rxpos, '/') .'/j '. tlib#arg#Ex(f)
                     " TLogVAR len(getqflist())
                     " silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/gj '. tlib#arg#Ex(f)
                     silent! exec 'vimgrepadd /'. escape(rxpos, '/') .'/j '. tlib#arg#Ex(f)
                     let strip = 1
                 endif
             else
+                let qfl = []
                 let lnum = 0
                 for line in readfile(f)
                     let lnum += 1
@@ -371,6 +361,15 @@ function! trag#Grep(args, ...) "{{{3
         endif
         call tlib#progressbar#Restore()
     endtry
+endf
+
+
+function! s:AddCurrentLine(file, qfl, rxneg) "{{{3
+    let lnum = line('.')
+    let text = getline(lnum)
+    if empty(a:rxneg) || text !~ a:rxneg
+        let a:qfl[lnum] = {"filename": a:file, "lnum": lnum, "text": tlib#string#Strip(text)}
+    endif
 endf
 
 
@@ -456,6 +455,7 @@ function! s:GetRx(filename, kinds, rx, default) "{{{3
                     if rx =~ '^\W' && rxf =~ '\\<%s'
                         let rxf = substitute(rxf, '\\<%s', '%s', 'g')
                     endif
+                    " TLogVAR rxf, rx
                     let rx = tlib#string#Printf1(rxf, rx)
                 endif
             endfor
@@ -497,14 +497,17 @@ function! s:FormatQFLE(qfe) "{{{3
 endf
 
 
+" :display: trag#QuickList(?world={})
 " Display the |quickfix| list with |tlib#input#ListW()|.
 function! trag#QuickList(...) "{{{3
+    TVarArg ['world', {}]
     " TVarArg ['sign', 'TRag']
     " if !empty(sign) && !empty(g:trag_sign)
     "     " call tlib#signs#ClearAll(sign)
     "     " call tlib#signs#Mark(sign, getqflist())
     " endif
-    let w = tlib#World#New(copy(g:trag_qfl_world))
+    let w = extend(copy(g:trag_qfl_world), world)
+    let w = tlib#World#New(w)
     let w.qfl  = copy(getqflist())
     " TLogVAR w.qfl
     call s:FormatBase(w)
