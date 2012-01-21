@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2010-03-30.
-" @Revision:    0.0.898
+" @Last Change: 2011-11-21.
+" @Revision:    0.0.921
 
 " call tlog#Log('Load: '. expand('<sfile>')) " vimtlib-sfile
 
@@ -27,6 +27,12 @@ TLet g:trag_get_files = 'split(glob("*"), "\n")'
 TLet g:trag_get_files_java = 'split(glob("**/*.java"), "\n")'
 TLet g:trag_get_files_c = 'split(glob("**/*.[ch]"), "\n")'
 TLet g:trag_get_files_cpp = 'split(glob("**/*.[ch]"), "\n")'
+
+" If true, use an already loaded buffer instead of the file on disk in 
+" certain situations. This implies that if a buffer is dirty, the 
+" non-saved version in memory will be preferred over the version on 
+" disk.
+TLet g:trag#use_buffer = 1
 
 " " If non-empty, display signs at matching lines.
 " TLet g:trag_sign = has('signs') ? '>' : ''
@@ -496,6 +502,7 @@ function! trag#Grep(args, ...) "{{{3
     endif
     " TLogVAR files
     " TAssertType files, 'list'
+    doautocmd QuickFixCmdPre trag
     call tlib#progressbar#Init(len(files), 'TRag: Grep %s', 20)
     if replace
         call setqflist([])
@@ -513,6 +520,7 @@ function! trag#Grep(args, ...) "{{{3
         " TLogVAR files
         let qfl_top = len(getqflist())
         for f in files
+            let ff = fnamemodify(f, ':p')
             " TLogVAR f
             call tlib#progressbar#Display(fidx, ' '. pathshorten(f))
             let rxpos = s:GetRx(f, kindspos, rx, '.')
@@ -524,8 +532,8 @@ function! trag#Grep(args, ...) "{{{3
                 " TLogDBG f .': continue '. filereadable(f) .' '. empty(rxpos)
                 continue
             endif
-            let fext = fnamemodify(f, ':e')
             let prcacc = []
+            " let fext = fnamemodify(f, ':e')
             " TODO: This currently doesn't work.
             " for kindand in kinds
             "     for kind in kindand
@@ -560,7 +568,14 @@ function! trag#Grep(args, ...) "{{{3
                     " norm! ggdG
                     " TLogVAR qfl
                     let lnum = 1
-                    for line in readfile(f)
+                    let bnum = bufnr(ff)
+                    if g:trag#use_buffer && bnum != -1 && bufloaded(bnum)
+                        " TLogVAR bnum, f, bufname(bnum)
+                        let lines = getbufline(bnum, 1, '$')
+                    else
+                        let lines = readfile(f)
+                    endif
+                    for line in lines
                         if line =~ rxpos && (empty(rxneg) || line !~ rxneg)
                             let qfl[lnum] = {"filename": f, "lnum": lnum, "text": tlib#string#Strip(line)}
                         endif
@@ -605,9 +620,11 @@ function! trag#Grep(args, ...) "{{{3
             let qfl1[qfl_top : -1] = map(qfl1[qfl_top : -1], 's:StripText(v:val)')
             call setqflist(qfl1, 'r')
         endif
+        doautocmd QuickFixCmdPost trag
 
         " TLogDBG 'qfl:'. string(getqflist())
-        return qfl1[qfl_top : -1]
+        let qfl2 = getqflist()
+        return qfl2[qfl_top : -1]
     finally
         " if search_mode == 2
         "     let &ei = ei
@@ -784,7 +801,8 @@ function! trag#BrowseList(world_dict, list, ...) "{{{3
     "     " call tlib#signs#ClearAll(sign)
     "     " call tlib#signs#Mark(sign, getqflist())
     " endif
-    if !anyway && empty(filter(copy(a:list), 'v:val.nr != -1'))
+    " if !anyway && empty(filter(copy(a:list), 'v:val.nr != -1'))
+    if !anyway && empty(a:list)
         return
     endif
     let s:world = copy(g:trag_qfl_world)
@@ -807,7 +825,7 @@ function! trag#LocList(...) "{{{3
     "     " call tlib#signs#ClearAll(sign)
     "     " call tlib#signs#Mark(sign, getqflist())
     " endif
-    call trag#BrowseList({}, getqflist())
+    call trag#BrowseList({}, getloclist(0))
 endf
 
 

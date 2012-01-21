@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2010-03-30.
-" @Revision:    606
+" @Last Change: 2011-11-21.
+" @Revision:    611
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
@@ -17,7 +17,7 @@ if !exists('g:loaded_tlib') || g:loaded_tlib < 37
         finish
     endif
 endif
-let loaded_trag = 8
+let loaded_trag = 9
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -236,4 +236,7 @@ default file list will be used.
 - Moved the definition of some variables from plugin/trag.vim to autoload/trag.vim
 - :TRagcw! (show :cw even if there are no recognized errors)
 - Require tlib 0.37
+
+0.9
+- g:trag#use_buffer
 
