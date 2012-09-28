@@ -189,12 +189,17 @@ Contents~
         g:trag_get_files_c ....... |g:trag_get_files_c|
         g:trag_get_files_cpp ..... |g:trag_get_files_cpp|
         g:trag#use_buffer ........ |g:trag#use_buffer|
+        g:trag#check_vcs ......... |g:trag#check_vcs|
+        trag#HasFiletype ......... |trag#HasFiletype()|
+        trag#SetFiletype ......... |trag#SetFiletype()|
+        trag#GetFiletype ......... |trag#GetFiletype()|
         g:trag_files ............. |g:trag_files|
         g:trag_glob .............. |g:trag_glob|
         g:trag_project_ruby ...... |g:trag_project_ruby|
         g:trag_project ........... |g:trag_project|
         g:trag_git ............... |g:trag_git|
-        trag#SetSyntax ........... |trag#SetSyntax()|
+        trag#InitListBuffer ...... |trag#InitListBuffer()|
+        trag#Balloon ............. |trag#Balloon()|
         trag#ClearFiles .......... |trag#ClearFiles()|
         trag#AddFiles ............ |trag#AddFiles()|
         trag#GetProjectFiles ..... |trag#GetProjectFiles()|
@@ -257,20 +262,20 @@ TRagDefFiletype FILETYPE EXTENSION ... FILENAME ...
     See |trag#Grep()| for help on the arguments.
     If the kind rx doesn't contain %s (e.g. todo), you can skip the 
     regexp.
-    
+
     Examples: >
         " Find any matches
         TRag . foo
-    
+
         " Find variable definitions (word on the left-hand): foo = 1
         TRag l foo
-    
+
         " Find variable __or__ function/method definitions
         TRag d,l foo
-    
+
         " Find function calls like: foo(a, b)
         TRag f foo
-    
+
         " Find TODO markers
         TRag todo
 <
@@ -301,7 +306,7 @@ TRagDefFiletype FILETYPE EXTENSION ... FILENAME ...
     Scan the files registered in your tag files for REGEXP. Generate a 
     quickfix list. With [!], append to the given list. The quickfix list 
     can be viewed with commands like |:cw| or |:TRagcw|.
-    
+
     The REGEXP has to match a single line. This uses |readfile()| and the 
     scans the lines. This is an alternative to |:vimgrep|.
     If you choose your identifiers wisely, this should guide you well 
@@ -314,7 +319,7 @@ TRagDefFiletype FILETYPE EXTENSION ... FILENAME ...
                                                     *:TRaggrep*
 :TRaggrep REGEXP [GLOBPATTERN]
     A 99%-replacement for grep. The glob pattern is optional.
-    
+
     Example: >
       :TRaggrep foo *.vim
       :TRaggrep bar
@@ -328,9 +333,9 @@ TRagDefFiletype FILETYPE EXTENSION ... FILENAME ...
     The file list is set only once per buffer. If the list of the project 
     files has changed, you have to run this command on order to reset the 
     per-buffer list.
-    
+
     If no filelist is given, collect the files in your tags files.
-    
+
     Examples: >
       :TRagsetfiles
       :TRagsetfiles split(glob('foo*.txt'), '\n')
@@ -382,6 +387,25 @@ g:trag#use_buffer              (default: 1)
     non-saved version in memory will be preferred over the version on 
     disk.
 
+                                                    *g:trag#check_vcs*
+g:trag#check_vcs               (default: 1)
+    If true, try to detect whether the current file is under an VCS and 
+    use that later on.
+
+                                                    *trag#HasFiletype()*
+trag#HasFiletype(name)
+    Return true, if a filetype for "name" (an extension or a filename) is 
+    defined.
+
+                                                    *trag#SetFiletype()*
+trag#SetFiletype(filetype, name)
+    Define that filenames ("name" can be either an extension or a 
+    filename) are of a certain filetype.
+
+                                                    *trag#GetFiletype()*
+trag#GetFiletype(name)
+    Get the filetype for "name" (either an extension of a filename).
+
 
 The following variables provide alternatives to collecting 
 your project's file list on the basis of you tags files.
@@ -418,8 +442,11 @@ g:trag_git                     (default: '')
     If the value is "finddir", use |finddir()| to find a .git directory.
     Can be buffer local.
 
-                                                    *trag#SetSyntax()*
-trag#SetSyntax()
+                                                    *trag#InitListBuffer()*
+trag#InitListBuffer()
+
+                                                    *trag#Balloon()*
+trag#Balloon()
 
                                                     *trag#ClearFiles()*
 trag#ClearFiles()
@@ -453,11 +480,11 @@ trag#Grep(args, ?replace=1, ?files=[])
     args: A string with the format:
       KIND REGEXP
       KIND1,KIND2 REGEXP
-    
+
     If the variables [bg]:trag_rxf_{kind}_{&filetype} or 
     [bg]:trag_rxf_{kind} exist, these will be taken as format string (see 
     |printf()|) to format REGEXP.
-    
+
     EXAMPLE:
     trag#Grep('v foo') will find by default take g:trag_rxf_v and find 
     lines that looks like "\<foo\>\s*=[^=~]", which most likely is a 
@@ -497,10 +524,10 @@ trag#AgentPreviewQFE(world, selected)
 trag#AgentGotoQFE(world, selected)
 
                                                     *trag#AgentWithSelected()*
-trag#AgentWithSelected(world, selected)
+trag#AgentWithSelected(world, selected, ...)
 
                                                     *trag#RunCmdOnSelected()*
-trag#RunCmdOnSelected(world, selected, cmd)
+trag#RunCmdOnSelected(world, selected, cmd, ...)
 
                                                     *trag#AgentSplitBuffer()*
 trag#AgentSplitBuffer(world, selected)
