@@ -1,16 +1,44 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=2033
 
-Trag builds regular expressions for vimgrep or its own grep-like function (depending on the task at hand) that allow you to find out where a variable is defined, where it is assigned to another variable, where a method is called etc. At least that's the idea. Since it doesn't use a database it's only suitable for smaller projects -- whatever that means.
+This plugin uses ad-hoc searches to find strings in files. For certain 
+languages, it can also find variable/function/class definitions, 
+function calls etc.
 
-First, define which files belong to your project. Most likely your project's source files are already registered in your tags or manifest.txt files, which will be used if available. Alternatively you can set the variable [wbg]:trag_files to a list of files that will be used instead. (Setting this variable will prevent the use of tags.)
+Other than |tags| or |cscope|, it doesn't build a database to speed up 
+searches but always scans all files. It can make use of external tools 
+like `git grep`, `ack`, or `ag` though, in order to gain acceptable 
+performance for medium-sized projects. The builtin vimscript-based 
+version file scanner and also |vimgrep| are suitable for small projects. 
+See |g:trag#grep_type| for available options.
 
-Secondly, perform certain operations on these files, like:
 
-    - Select a file to edit
-    - Scan/search files for an expression (somewhat like grep)
-    - Provide for "modes", i.e. format the regular expression so that 
-      you can easily search for, e.g., only variable definitions or only 
-      function calls.
+Usage~
+
+First, define which files belong to your project. See 
+|g:trag#file_sources| for available sources. If the variable contains 
+"vcs" and the current buffer is under control of a supported VCS, trag 
+will scan the files in the VCS. Maybe your project's source files are 
+already registered in your tags files, in which case those will be used.
+
+Secondly, use |:Trag| or |:Traggrep| to scan your project's files. You 
+can restrict searches to certain "kinds" like only variable definitions 
+or only function calls. See |trag-kinds| for details.
+
+You can also type <Leader>r# to search for the word under cursor (see 
+|g:trag_map_leader| and |TragInstallMap()| for details on maps). In 
+supported filetypes, <Leader>rd will search for the definition of the 
+word under cursor.
+
+Currently the following filetypes are supported:
+
+    - java
+    - javascript
+    - json
+    - make
+    - r
+    - ruby
+    - viki
+    - vim
 
 
 :TRag[!] MODE REGEXP

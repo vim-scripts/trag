@@ -3,21 +3,21 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-09-29.
-" @Last Change: 2012-09-27.
-" @Revision:    617
+" @Last Change: 2014-07-03.
+" @Revision:    673
 " GetLatestVimScripts: 2033 1 trag.vim
 
 if &cp || exists("loaded_trag")
     finish
 endif
-if !exists('g:loaded_tlib') || g:loaded_tlib < 100
+if !exists('g:loaded_tlib') || g:loaded_tlib < 111
     runtime plugin/02tlib.vim
-    if !exists('g:loaded_tlib') || g:loaded_tlib < 100
-        echoerr 'tlib >= 0.100 is required'
+    if !exists('g:loaded_tlib') || g:loaded_tlib < 111
+        echoerr 'tlib >= 0.111 is required'
         finish
     endif
 endif
-let loaded_trag = 11
+let loaded_trag = 100
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -28,15 +28,29 @@ TLet g:trag_kinds = {}
 " :nodoc:
 TLet g:trag_keyword_chars = {}
 
+" Trag map leader. See also |TragInstallMap()|.
+TLet g:trag_map_leader = '<Leader>r'
 
-" :display: :TRagDefKind KIND FILETYPE /REGEXP_FORMAT/
+" A dictionary FILENAME_EXTENSION => FILETYPE
+" On systems without has('fname_case') (see |feature-list|), 
+" FILENAME_EXTENSION should be a lower-case string.
+TLet g:trag_extension_filetype = {}
+
+" A list of kinds for which |TragInstallKindMap()| will install maps that ignore comments.
+TLet g:trag_kinds_ignored_comments = ['c', 'd', 'f', 'l', 'r', 'u']
+
+
+" :display: :TRagDefKind[!] KIND FILETYPE /REGEXP_FORMAT/
 " The regexp argument is no real regexp but a format string. % thus have 
 " to be escaped with % (see |printf()| for details). The REGEXP_FORMAT 
 " should contain at least one %s.
+"
+" With the [!], reset the regexp definitions.
+"
 " Examples: >
 "   TRagDefKind v * /\C\<%s\>\s*=[^=~<>]/
 "   TRagDefKind v ruby /\C\<%s\>\(\s*,\s*[[:alnum:]_@$]\+\s*\)*\s*=[^=~<>]/
-command! -nargs=1 TRagDefKind call trag#TRagDefKind(<q-args>)
+command! -bang -nargs=1 TRagDefKind call trag#TRagDefKind(<q-args>, !empty("<bang>"))
 
 
 " :display: TRagKeyword FILETYPE KEYWORD_CHARS
@@ -56,43 +70,40 @@ command! -nargs=+ TRagKeyword if len([<f-args>]) == 2
 " has('fname_case')), EXTENSION should be defined in lower case letters.
 " Examples: >
 "   TRagDefFiletype html html htm xhtml
-command! -nargs=+ TRagDefFiletype for e in [<f-args>][1:-1] | call trag#SetFiletype([<f-args>][0], e) | endfor
+command! -nargs=+ TRagDefFiletype call trag#DefFiletype([<f-args>])
 
 
-" :display: :TRag[!] KIND [REGEXP]
-" Run |:TRagsearch| and instantly display the result with |:TRagcw|.
+" :display: :Trag[!] KIND [REGEXP]
+" Run |:Tragsearch| and instantly display the result with |:Tragcw|.
 " See |trag#Grep()| for help on the arguments.
 " If the kind rx doesn't contain %s (e.g. todo), you can skip the 
 " regexp.
 "
 " Examples: >
 "     " Find any matches
-"     TRag . foo
+"     Trag . foo
 " 
 "     " Find variable definitions (word on the left-hand): foo = 1
-"     TRag l foo
+"     Trag l foo
 " 
 "     " Find variable __or__ function/method definitions
-"     TRag d,l foo
+"     Trag d,l foo
 " 
 "     " Find function calls like: foo(a, b)
-"     TRag f foo
+"     Trag f foo
 "
 "     " Find TODO markers
-"     TRag todo
-command! -nargs=1 -bang -bar TRag TRagsearch<bang> <args> | TRagcw
-command! -nargs=1 -bang -bar Trag TRag<bang> <args>
+"     Trag todo
+command! -nargs=1 -bang -bar Trag Tragsearch<bang> <args> | Tragcw
 
 
-" :display: :TRagfile
+" :display: :Tragfile
 " Edit a file registered in your tag files.
-command! TRagfile call trag#Edit()
 command! Tragfile call trag#Edit()
 
 
-" :display: :TRagcw
+" :display: :Tragcw
 " Display a quick fix list using |tlib#input#ListD()|.
-command! -bang -nargs=? TRagcw call trag#QuickListMaybe(!empty("<bang>"))
 command! -bang -nargs=? Tragcw call trag#QuickListMaybe(!empty("<bang>"))
 
 " :display: :Traglw
@@ -100,35 +111,33 @@ command! -bang -nargs=? Tragcw call trag#QuickListMaybe(!empty("<bang>"))
 command! -nargs=? Traglw call trag#LocList()
 
 
-" :display: :TRagsearch[!] KIND REGEXP
+" :display: :Tragsearch[!] KIND REGEXP
 " Scan the files registered in your tag files for REGEXP. Generate a 
 " quickfix list. With [!], append to the given list. The quickfix list 
-" can be viewed with commands like |:cw| or |:TRagcw|.
+" can be viewed with commands like |:cw| or |:Tragcw|.
 "
 " The REGEXP has to match a single line. This uses |readfile()| and the 
 " scans the lines. This is an alternative to |:vimgrep|.
 " If you choose your identifiers wisely, this should guide you well 
 " through your sources.
 " See |trag#Grep()| for help on the arguments.
-command! -nargs=1 -bang -bar TRagsearch call trag#Grep(<q-args>, empty("<bang>"))
-command! -nargs=1 -bang -bar Tragsearch TRagsearch<bang> <args>
+command! -nargs=1 -bang -bar Tragsearch call trag#Grep(<q-args>, empty("<bang>"))
 
 
-" :display: :TRaggrep REGEXP [GLOBPATTERN]
+" :display: :Traggrep REGEXP [GLOBPATTERN]
 " A 99%-replacement for grep. The glob pattern is optional.
 "
 " Example: >
-"   :TRaggrep foo *.vim
-"   :TRaggrep bar
-command! -nargs=+ -bang -bar -complete=file TRaggrep
+"   :Traggrep foo *.vim
+"   :Traggrep bar
+command! -nargs=+ -bang -bar -complete=file Traggrep
             \ let g:trag_grepargs = ['.', <f-args>]
             \ | call trag#Grep(g:trag_grepargs[0] .' '. g:trag_grepargs[1], empty("<bang>"), g:trag_grepargs[2:-1])
             \ | unlet g:trag_grepargs
-            \ | TRagcw
-command! -nargs=+ -bang -bar -complete=file Traggrep TRaggrep<bang> <args>
+            \ | Tragcw
 
 
-" :display: :TRagsetfiles [FILELIST]
+" :display: :Tragsetfiles [GLOB PATTERN]
 " The file list is set only once per buffer. If the list of the project 
 " files has changed, you have to run this command on order to reset the 
 " per-buffer list.
@@ -136,20 +145,62 @@ command! -nargs=+ -bang -bar -complete=file Traggrep TRaggrep<bang> <args>
 " If no filelist is given, collect the files in your tags files.
 "
 " Examples: >
-"   :TRagsetfiles
-"   :TRagsetfiles split(glob('foo*.txt'), '\n')
-command! -nargs=? -bar -complete=file TRagsetfiles call trag#SetFiles(<args>)
+"   :Tragsetfiles
+"   :Tragsetfiles foo*.txt
+command! -nargs=? -bar -complete=file Tragsetfiles call trag#SetFiles(<q-args>)
 
-" :display: :TRagaddfiles FILELIST
+" :display: :Tragaddfiles FILELIST
 " Add more files to the project list.
-command! -nargs=1 -bar -complete=file TRagaddfiles call trag#AddFiles(<args>)
+command! -nargs=1 -bar -complete=file Tragaddfiles call trag#AddFiles(<args>)
 
-" :display: :TRagclearfiles
+" :display: :Tragclearfiles
 " Remove any files from the project list.
-command! TRagclearfiles call trag#ClearFiles()
+command! Tragclearfiles call trag#ClearFiles()
 
-" :display: :TRagGitFiles GIT_REPOS
-command! -nargs=1 -bar -complete=dir TRagGitFiles call trag#SetGitFiles(<q-args>)
+" :display: :TragGitFiles GIT_REPOS
+command! -nargs=1 -bar -complete=dir TragGitFiles call trag#SetGitFiles(<q-args>)
+
+command! -bar TragRepoFiles call trag#SetRepoFiles()
+
+
+" Install the following maps:
+"
+"   <trag_map_leader># ........ Search word under cursor
+"   <trag_map_leader>. ........ :Trag * <Input>
+"   <trag_map_leader>- ........ :Tragfile
+"
+" The following maps might be defined only after the first invocation:
+"
+"   <trag_map_leader><KIND> ... Search word under cursor of KIND
+"                               See |g:trag_kinds|
+"
+" E.g. <trag_map_leader>d searches for the definition of the word under 
+" cursor.
+function! TragInstallMap(leader) "{{{3
+    " TLogVAR a:leader
+    exec 'noremap' a:leader .'. :Trag * '
+    exec 'noremap' a:leader .'- :Tragfile<cr>'
+    exec 'noremap <silent>' a:leader .'# :Trag #w <c-r>=trag#CWord()<cr><cr>'
+    for kind in keys(g:trag_kinds)
+        call TragInstallKindMap(leader, kind)
+    endfor
+endf
+
+function! TragInstallKindMap(leader, kind) "{{{3
+    " TLogVAR a:leader, a:kind
+    if len(a:kind) == 1
+        let kind = a:kind
+        if index(g:trag_kinds_ignored_comments, kind) != -1
+            let kind .= ',-i'
+        endif
+        exec 'nnoremap' a:leader . a:kind ':Trag #'. kind '<c-r>=trag#CWord()<cr><cr>'
+        exec 'vnoremap' a:leader . a:kind 'y<esc>:Trag #'. kind '<c-r>"<cr>'
+    endif
+endf
+
+if !empty(g:trag_map_leader)
+    call TragInstallMap(g:trag_map_leader)
+endif
 
 
 let &cpo = s:save_cpo
