@@ -41,19 +41,19 @@ Currently the following filetypes are supported:
     - vim
 
 
-:TRag[!] MODE REGEXP
-    Run |:TRagsearch| and instantly display the result with |:TRagcw|.
+:Trag[!] MODE REGEXP
+    Run |:Tragsearch| and instantly display the result with |:Tragcw|.
     See |trag#Grep()| for help on the arguments.
     Examples:
       " Find any matches
-      TRag . foo
+      Trag . foo
 
       " Find variable definitions (word on the left-hand): foo = 1
-      TRag l foo
+      Trag l foo
     
       " Find variable __or__ function/method definitions
-      TRag d,l foo
+      Trag d,l foo
     
       " Find function calls like: foo(a, b)
-      TRag f foo
+      Trag f foo
 

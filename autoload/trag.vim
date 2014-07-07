@@ -1,8 +1,8 @@
 " @Author:      Tom Link (mailto:micathom AT gmail com?subject=[vim])
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
-" @Last Change: 2014-07-03.
-" @Revision:    1388
+" @Last Change: 2014-07-07.
+" @Revision:    1480
 
 " call tlog#Log('Load: '. expand('<sfile>')) " vimtlib-sfile
 
@@ -27,6 +27,10 @@
 "                                                     *b:trag_grep_type*
 " b:trag_grep_type overrides this global variable.
 TLet g:trag#grep_type = 'trag'
+
+" Use this type for files that are not supported by |g:trag#grep_type| 
+" (e.g. files outside of a VCS if |g:trag#grep_type| includes "vcs").
+TLet g:trag#grep_fallback_type = 'trag'
 
 " If no project files are defined, evaluate this expression as 
 " fallback-strategy.
@@ -58,6 +62,8 @@ TLet g:trag#use_buffer = 1
 " use that later on.
 TLet g:trag#check_vcs = 1
 
+TLet g:trag#debug = 0
+
 
 " :nodoc:
 function! trag#DefFiletype(args) "{{{3
@@ -86,7 +92,14 @@ endf
 function! trag#GetFiletype(name) "{{{3
     let name = has('fname_case') ? a:name : tolower(a:name)
     " TLogVAR name, get(g:trag_extension_filetype,name,"")
-    return get(g:trag_extension_filetype, name, '')
+    for [pattern, ft] in items(g:trag_extension_filetype)
+        if pattern =~ '^/.\{-}/$' && a:name =~ pattern
+            return ft
+        elseif a:name == pattern
+            return ft
+        endif
+    endfor
+    return ''
 endf
 
 
@@ -300,16 +313,17 @@ function! s:GetFiles() "{{{3
         call trag#SetFiles()
     endif
     if empty(b:trag_files_)
-        " echohl Error
-        " echoerr 'TRag: No project files'
-        " echohl NONE
         let trag_get_files = tlib#var#Get('trag_get_files_'. &filetype, 'bg', '')
         " TLogVAR trag_get_files
         if empty(trag_get_files)
             let trag_get_files = tlib#var#Get('trag_get_files', 'bg', '')
             " TLogVAR trag_get_files
         endif
-        echom 'TRag: No project files ... use: '. trag_get_files
+        if g:trag#debug
+            " echohl Error
+            echom 'TRag: No project files ... use: '. trag_get_files
+            " echohl NONE
+        endif
         let b:trag_files_ = eval(trag_get_files)
     endif
     " TLogVAR b:trag_files_
@@ -719,9 +733,9 @@ function! s:GrepWith_external(grep_defs, grep_opts) "{{{3
     " TLogVAR grep_cmd
     let group_defs = {}
     let must_filter = {}
-    for grep_def in a:grep_defs
+    for grep_def in deepcopy(a:grep_defs)
         let ft = grep_def.filetype
-        " TLogVAR ft
+        " TLogVAR ft, grep_def.ff
         if !has_key(group_defs, ft)
             " TLogVAR grep_def.kindspos, trag#external#{grep_cmd}#IsSupported(grep_def.kindspos)
             let group_defs[ft] = {'rxpos': grep_def.rxpos,
@@ -731,47 +745,76 @@ function! s:GrepWith_external(grep_defs, grep_opts) "{{{3
             if !trag#external#{grep_cmd}#IsSupported(grep_def.kindspos)
                 let must_filter[ft] = grep_def.rxpos
                 let group_defs[ft].use_rx = grep_def.rx
+                let group_defs[ft].use_kinds = [['identity']]
             endif
+            " TLogVAR group_defs[ft]
         endif
         call add(group_defs[ft].files, grep_def.ff)
     endfor
-    for group_def in values(group_defs)
+    let unprocessed_fnames = {}
+    for [ft, group_def] in items(group_defs)
         let rx = get(group_def, 'use_rx', group_def.rxpos)
-        let ok = trag#external#{grep_cmd}#Run(rx, group_def.files)
-        " TLogVAR len(getqflist())
-        if !ok
-            echohl WarningMsg
-            echom 'Trag: Error when using external grep:' grep_cmd
-            echom v:exception
-            echohl NONE
+        let kinds = get(group_def, 'use_kinds', group_def.kindspos)
+        " TLogVAR rx, kinds
+        let [ok, unprocessed_files] = trag#external#{grep_cmd}#Run(kinds, rx, group_def.files)
+        " TLogVAR ft, len(getqflist())
+        if ok
+            for unprocessed_file in unprocessed_files
+                let unprocessed_fnames[unprocessed_file] = 1
+            endfor
+        else
+            if g:trag#debug
+                echohl WarningMsg
+                echom 'Trag: Error when using external grep:' grep_cmd
+                echom v:exception
+                echohl NONE
+            endif
             return 0
         endif
     endfor
+    " bufnr() can be slow
+    let bnums = {}
+    for bnum in range(1, bufnr('$'))
+        if bufexists(bnum)
+            let fname = tlib#file#Canonic(fnamemodify(bufname(bnum), ':p'))
+            let bnums[fname] = bnum
+        endif
+    endfor
+    " TLogVAR bnums
     if !empty(must_filter)
         let qfl = getqflist()
+        let qfl = filter(qfl, 'v:val.bufnr > 0')
         " TLogVAR qfl
+        " TLogVAR 1, len(qfl)
+        let collected_bufnrs = {}
         for [ft, rxpos] in items(must_filter)
             " TLogVAR ft, rxpos
-            let bufnrs = map(copy(group_defs[ft].files), 'bufnr(v:val)')
-            let bufnrs = filter(bufnrs, 'v:val > 0')
-            let bufnrs = sort(bufnrs)
+            " TLogVAR group_defs[ft].files
+            let bufnrs = tlib#list#ToDictionary(filter(map(copy(group_defs[ft].files), 'get(bnums, tlib#file#Canonic(v:val), 0)'), 'v:val > 0'), 1)
             " TLogVAR bufnrs
-            " TLogVAR map(copy(qfl), 'v:val.bufnr')
-            let qfl = filter(qfl, 'index(bufnrs, v:val.bufnr) == -1 || v:val.text =~ rxpos')
-            " TLogVAR qfl
+            let collected_bufnrs = extend(collected_bufnrs, bufnrs)
+            let qfl = filter(qfl, '!has_key(bufnrs, v:val.bufnr) || v:val.text =~ rxpos')
         endfor
+        " TLogVAR 2, len(qfl)
+        " let qfl = filter(qfl, 'has_key(collected_bufnrs, v:val.bufnr)')
+        " TLogVAR 3, len(qfl)
         call setqflist(qfl)
     endif
     let rxnegs = {}
-    for grep_def in a:grep_defs
+    for grep_def in deepcopy(a:grep_defs)
         if !empty(grep_def.rxneg)
-            let bufnr = bufnr(grep_def.ff)
+            let bufnr = get(bnums, tlib#file#Canonic(grep_def.ff), 0)
             if bufnr > 0 && !has_key(rxnegs, bufnr)
                 let rxnegs[bufnr] = grep_def.rxneg
             endif
         endif
     endfor
     call s:FilterRxNegs(rxnegs)
+    if !empty(unprocessed_fnames)
+        " TLogVAR unprocessed_fnames
+        let grep_defs1 = filter(deepcopy(a:grep_defs), 'has_key(unprocessed_fnames, v:val.ff)')
+        call s:GrepWith_{g:trag#grep_fallback_type}(grep_defs1, a:grep_opts)
+    endif
     return 1
 endf
 
@@ -780,7 +823,9 @@ function! s:FilterRxNegs(rxnegs) "{{{3
     " TLogVAR a:rxnegs
     if !empty(a:rxnegs)
         let qfl = getqflist()
+        " TLogVAR 1, len(qfl)
         let qfl = filter(qfl, '!has_key(a:rxnegs, v:val.bufnr) || v:val.text !~ a:rxnegs[v:val.bufnr]')
+        " TLogVAR 2, len(qfl)
         call setqflist(qfl)
     endif
 endf
