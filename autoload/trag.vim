@@ -1,8 +1,8 @@
 " @Author:      Tom Link (mailto:micathom AT gmail com?subject=[vim])
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
-" @Last Change: 2014-07-07.
-" @Revision:    1480
+" @Last Change: 2014-10-09.
+" @Revision:    1500
 
 " call tlog#Log('Load: '. expand('<sfile>')) " vimtlib-sfile
 
@@ -251,8 +251,17 @@ let s:grep_rx = ''
 
 
 function! trag#InitListBuffer() "{{{3
-    let syntax = get(s:world, 'trag_list_syntax', '')
-    let nextgroup = get(s:world, 'trag_list_syntax_nextgroup', '')
+    let set_syntax = get(s:world, 'set_syntax', 's:SetSyntax')
+    call call(set_syntax, [], s:world)
+    if has('balloon_eval')
+        setlocal ballooneval balloonexpr=trag#Balloon()
+    endif
+endf
+
+
+function! s:SetSyntax() dict "{{{3
+    let syntax = get(self, 'trag_list_syntax', '')
+    let nextgroup = get(self, 'trag_list_syntax_nextgroup', '')
     if !empty(syntax)
         exec printf('runtime syntax/%s.vim', syntax)
     endif
@@ -264,9 +273,6 @@ function! trag#InitListBuffer() "{{{3
     endif
     hi def link TTagedFilesFilename Directory
     hi def link TTagedFilesLNum LineNr
-    if has('balloon_eval')
-        setlocal ballooneval balloonexpr=trag#Balloon()
-    endif
 endf
 
 
@@ -418,7 +424,9 @@ function! trag#SetFiles(...) "{{{3
     TVarArg ['files', []]
     call trag#ClearFiles()
     if empty(files)
+        let source1 = ''
         for source in tlib#var#Get('trag#file_sources', 'bg', [])
+            let source1 = source
             if source == 'files'
                 let files = tlib#var#Get('trag_files', 'bg', [])
             elseif source == 'glob'
@@ -466,6 +474,9 @@ function! trag#SetFiles(...) "{{{3
         call map(files, 'fnamemodify(v:val, ":p")')
         " TLogVAR files
         call trag#AddFiles(files)
+        let b:trag_source = source1
+    else
+        let b:trag_source = ''
     endif
     " TLogVAR b:trag_files_
     if empty(b:trag_files_)
@@ -521,7 +532,11 @@ function! trag#Edit() "{{{3
     let w.base = s:GetFiles()
     let w.show_empty = 1
     let w.pick_last_item = 0
-    call w.SetInitialFilter(matchstr(expand('%:t:r'), '^\w\+'))
+    if b:trag_source !~ '\<vcs\>'
+        let pattern = matchstr(expand('%:t:r'), '^\w\+')
+        " call w.SetInitialFilter(pattern)
+        call w.SetInitialFilter([[''], [pattern]])
+    endif
     call w.Set_display_format('filename')
     " TLogVAR w.base
     call tlib#input#ListW(w)
@@ -986,7 +1001,7 @@ function! s:Rx(rxacc, default) "{{{3
 endf
 
 
-function! s:GetFilename(qfe) "{{{3
+function! trag#GetFilename(qfe) "{{{3
     let filename = get(a:qfe, 'filename')
     if empty(filename)
         let filename = bufname(get(a:qfe, 'bufnr'))
@@ -995,7 +1010,7 @@ function! s:GetFilename(qfe) "{{{3
 endf
 
 function! s:FormatQFLE(qfe) "{{{3
-    let filename = s:GetFilename(a:qfe)
+    let filename = trag#GetFilename(a:qfe)
     if get(s:world, 'trag_short_filename', '')
         let filename = pathshorten(filename)
     endif
@@ -1059,7 +1074,8 @@ endf
 
 
 function! s:FormatBase(world) "{{{3
-    let a:world.base = map(copy(a:world.qfl), 's:FormatQFLE(v:val)')
+    let fmt = get(a:world, 'format_item', 's:FormatQFLE(v:val)')
+    let a:world.base = map(copy(a:world.qfl),  fmt)
 endf
 
 function! trag#AgentEditQFE(world, selected, ...) "{{{3
@@ -1075,13 +1091,13 @@ function! trag#AgentEditQFE(world, selected, ...) "{{{3
             " TLogVAR idx
             if idx >= 0
                 " TLogVAR a:world.qfl
-                " call tlog#Debug(string(map(copy(a:world.qfl), 's:GetFilename(v:val)')))
+                " call tlog#Debug(string(map(copy(a:world.qfl), 'trag#GetFilename(v:val)')))
                 " call tlog#Debug(string(map(copy(a:world.qfl), 'v:val.bufnr')))
                 " TLogVAR idx, a:world.qfl[idx]
                 let qfe = a:world.qfl[idx]
                 " let back = a:world.SwitchWindow('win')
                 " TLogVAR cmd_edit, cmd_buffer, qfe
-                let fn = s:GetFilename(qfe)
+                let fn = trag#GetFilename(qfe)
                 " TLogVAR cmd_edit, cmd_buffer, fn
                 call tlib#file#With(cmd_edit, cmd_buffer, [fn], a:world)
                 " TLogDBG bufname('%')
